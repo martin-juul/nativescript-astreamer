@@ -56,3 +56,4 @@ demo/report/report.html
 demo/report/stats.json
 !demo/webpack.config.js
 package-lock.json
+/package

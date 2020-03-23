@@ -1,328 +1,257 @@
+import { Observable } from 'tns-core-modules/data/observable';
 import { knownFolders, path } from 'tns-core-modules/file-system';
 import { isString } from 'tns-core-modules/utils/types';
-import { TNSPlayerI, TNSPlayerUtil, TNS_Player_Log } from '../common';
-import { AudioPlayerOptions } from '../options';
+import { NS_AUDIO_LOGGER, NS_AUDIO_UTIL, NSAudioPlayer as PlayerInterface } from '../common';
+import { AudioPlayerEvent, AudioPlayerOptions } from '../options';
 
-declare var AVAudioPlayer;
+export class NSAudioPlayer extends NSObject implements PlayerInterface {
+  private _player: AVPlayer;
+  private _events: Observable;
 
-export class TNSPlayer extends NSObject implements TNSPlayerI {
-  public static ObjCProtocols = [AVAudioPlayerDelegate];
-  private _player: AVAudioPlayer;
-  private _task: NSURLSessionDataTask;
-  private _completeCallback: any;
-  private _errorCallback: any;
-  private _infoCallback: any;
+  private readonly log: NS_AUDIO_LOGGER;
+
+  constructor() {
+    super();
+
+    this.log = new NS_AUDIO_LOGGER('ios');
+  }
+
+  /**
+   * Status Observer is for watching the status of the AVPlayerItem to know if playback is ready or not.
+   */
+  private _statusObserver;
+  private _statusObserverActive: boolean;
+
+  get events() {
+    if (!this._events) {
+      this._events = new Observable();
+    }
+
+    return this._events;
+  }
 
   get ios(): any {
     return this._player;
   }
 
   set debug(value: boolean) {
-    TNSPlayerUtil.debug = value;
+    NS_AUDIO_UTIL.debug = value;
   }
 
-  public get volume(): number {
+  get volume(): number {
     return this._player ? this._player.volume : 0;
   }
 
-  public set volume(value: number) {
+  set volume(value: number) {
     if (this._player && value >= 0) {
       this._player.volume = value;
     }
   }
 
-  public get duration() {
-    if (this._player) {
-      return this._player.duration;
-    } else {
-      return 0;
+  get duration() {
+    if (this._player && this._player.currentItem) {
+      const seconds = CMTimeGetSeconds(this._player.currentItem.asset.duration);
+
+      return seconds * 1000.0;
     }
+
+    return 0;
   }
 
   get currentTime(): number {
-    return this._player ? this._player.currentTime : 0;
+    if (this._player && this._player.currentItem) {
+      const currentTime = this._player.currentTime();
+
+      return ((currentTime.value / currentTime.timescale) * 1000);
+    }
+
+    return 0;
   }
 
-  public initFromFile(options: AudioPlayerOptions): Promise<any> {
-    return new Promise((resolve, reject) => {
-      // init only
-      options.autoPlay = false;
-      this.playFromFile(options).then(resolve, reject);
-    });
+  async initFromFile(options: AudioPlayerOptions): Promise<any> {
+    // init only
+    options.autoPlay = false;
+
+    return this.playFromFile(options);
   }
 
-  public playFromFile(options: AudioPlayerOptions): Promise<any> {
-    return new Promise((resolve, reject) => {
-      // only if not explicitly set, default to true
-      if (options.autoPlay !== false) {
-        options.autoPlay = true;
-      }
+  async playFromFile(options: AudioPlayerOptions): Promise<any> {
+    this._statusObserver = PlayerObserverClass.alloc();
+    this._statusObserver['_owner'] = this;
 
-      try {
-        let fileName = isString(options.audioFile) ? options.audioFile.trim() : '';
-        if (fileName.indexOf('~/') === 0) {
-          fileName = path.join(knownFolders.currentApp().path, fileName.replace('~/', ''));
-        }
-        TNS_Player_Log('fileName', fileName);
+    let fileName = isString(options.audioFile) ? options.audioFile.trim() : '';
 
-        this._completeCallback = options.completeCallback;
-        this._errorCallback = options.errorCallback;
-        this._infoCallback = options.infoCallback;
+    if (fileName.indexOf('~/') === 0) {
+      fileName = path.join(
+        knownFolders.currentApp().path,
+        fileName.replace('~/', ''),
+      );
+    }
 
-        const audioSession = AVAudioSession.sharedInstance();
-        audioSession.setCategoryWithOptionsError(
-          AVAudioSessionCategoryAmbient,
-          AVAudioSessionCategoryOptions.DuckOthers
-        );
-        const output = audioSession.currentRoute.outputs.lastObject.portType;
-        TNS_Player_Log('output', output);
+    this.log.info(`playFromFile: filename ${fileName}`);
 
-        if (output.match(/Receiver/)) {
-          try {
-            audioSession.setCategoryError(AVAudioSessionCategoryPlayAndRecord);
-            audioSession.overrideOutputAudioPortError(AVAudioSessionPortOverride.Speaker);
-            audioSession.setActiveError(true);
-            TNS_Player_Log('audioSession category set and active');
-          } catch (err) {
-            TNS_Player_Log('setting audioSession category failed');
-          }
-        }
+    this._setIOSAudioSessionOutput();
+    this._setupPlayerItem(fileName, true);
 
-        const errorRef = new interop.Reference();
-        this._player = AVAudioPlayer.alloc().initWithContentsOfURLError(NSURL.fileURLWithPath(fileName), errorRef);
-        if (errorRef && errorRef.value) {
-          reject(errorRef.value);
-          return;
-        } else if (this._player) {
-          this._player.delegate = this;
+    if (options.loop) {
+      // Invoke after player is created and AVPlayerItem is specified
+      NSNotificationCenter.defaultCenter.addObserverSelectorNameObject(
+        this,
+        'playerItemDidReachEnd',
+        AVPlayerItemDidPlayToEndTimeNotification,
+        this._player.currentItem,
+      );
+    }
 
-          // enableRate to change playback speed
-          this._player.enableRate = true;
-
-          TNS_Player_Log('this._player', this._player);
-
-          if (options.metering) {
-            TNS_Player_Log('enabling metering...');
-            this._player.meteringEnabled = true;
-          }
-
-          if (options.loop) {
-            this._player.numberOfLoops = -1;
-          }
-
-          if (options.autoPlay) {
-            this._player.play();
-          }
-
-          resolve();
-        } else {
-          reject();
-        }
-      } catch (ex) {
-        if (this._errorCallback) {
-          this._errorCallback({ ex });
-        }
-        reject(ex);
-      }
-    });
-  }
-
-  public initFromUrl(options: AudioPlayerOptions): Promise<any> {
-    return new Promise((resolve, reject) => {
-      // init only
-      options.autoPlay = false;
-      this.playFromUrl(options).then(resolve, reject);
-    });
-  }
-
-  public playFromUrl(options: AudioPlayerOptions): Promise<any> {
-    return new Promise((resolve, reject) => {
-      // only if not explicitly set, default to true
-      if (options.autoPlay !== false) {
-        options.autoPlay = true;
-      }
-
-      try {
-        this._task = NSURLSession.sharedSession.dataTaskWithURLCompletionHandler(
-          NSURL.URLWithString(options.audioFile),
-          (data, response, error) => {
-            if (error !== null) {
-              if (this._errorCallback) {
-                this._errorCallback({ error });
-              }
-
-              reject();
-            }
-
-            this._completeCallback = options.completeCallback;
-            this._errorCallback = options.errorCallback;
-            this._infoCallback = options.infoCallback;
-
-            const audioSession = AVAudioSession.sharedInstance();
-            audioSession.setCategoryWithOptionsError(
-              AVAudioSessionCategoryAmbient,
-              AVAudioSessionCategoryOptions.DuckOthers
-            );
-            const output = audioSession.currentRoute.outputs.lastObject.portType;
-
-            if (output.match(/Receiver/)) {
-              try {
-                audioSession.setCategoryError(AVAudioSessionCategoryPlayAndRecord);
-                audioSession.overrideOutputAudioPortError(AVAudioSessionPortOverride.Speaker);
-                audioSession.setActiveError(true);
-                TNS_Player_Log('audioSession category set and active');
-              } catch (err) {
-                TNS_Player_Log('setting audioSession category failed');
-              }
-            }
-
-            const errorRef = new interop.Reference();
-            this._player = AVAudioPlayer.alloc().initWithDataError(data, errorRef);
-            if (errorRef && errorRef.value) {
-              reject(errorRef.value);
-              return;
-            } else if (this._player) {
-              this._player.delegate = this;
-              TNS_Player_Log('this._player', this._player);
-
-              // enableRate to change playback speed
-              this._player.enableRate = true;
-
-              this._player.numberOfLoops = options.loop ? -1 : 0;
-
-              if (options.metering) {
-                TNS_Player_Log('enabling metering...');
-                this._player.meteringEnabled = true;
-              }
-
-              if (options.autoPlay) {
-                this._player.play();
-              }
-
-              resolve();
-            } else {
-              reject();
-            }
-          }
-        );
-
-        this._task.resume();
-      } catch (ex) {
-        if (this._errorCallback) {
-          this._errorCallback({ ex });
-        }
-        reject(ex);
-      }
-    });
-  }
-
-  public pause(): Promise<any> {
-    return new Promise((resolve, reject) => {
-      try {
-        if (this._player && this._player.playing) {
-          TNS_Player_Log('pausing player...');
-          this._player.pause();
-          resolve(true);
-        }
-      } catch (ex) {
-        if (this._errorCallback) {
-          this._errorCallback({ ex });
-        }
-        TNS_Player_Log('pause error', ex);
-        reject(ex);
-      }
-    });
-  }
-
-  public play(): Promise<any> {
-    return new Promise((resolve, reject) => {
-      try {
-        if (!this.isAudioPlaying()) {
-          TNS_Player_Log('player play...');
-          this._player.play();
-          resolve(true);
-        }
-      } catch (ex) {
-        if (this._errorCallback) {
-          this._errorCallback({ ex });
-        }
-        TNS_Player_Log('play error', ex);
-        reject(ex);
-      }
-    });
-  }
-
-  public resume(): void {
-    if (this._player) {
-      TNS_Player_Log('resuming player...');
+    if (options.autoPlay) {
       this._player.play();
     }
   }
 
-  public playAtTime(time: number): void {
+  playerItemDidReachEnd() {
     if (this._player) {
-      TNS_Player_Log('playAtTime', time);
-      this._player.playAtTime(time);
+      this._player.seekToTime(kCMTimeZero);
+      this._player.play();
     }
   }
 
-  public seekTo(time: number): Promise<any> {
-    return new Promise((resolve, reject) => {
-      try {
-        if (this._player) {
-          TNS_Player_Log('seekTo', time);
-          this._player.currentTime = time;
-          resolve(true);
-        }
-      } catch (ex) {
-        TNS_Player_Log('seekTo error', ex);
-        reject(ex);
+  async initFromUrl(options: AudioPlayerOptions): Promise<any> {
+    options.autoPlay = false;
+
+    return this.playFromUrl(options);
+  }
+
+  async playFromUrl(options: AudioPlayerOptions) {
+    this._statusObserver = PlayerObserverClass.alloc();
+    this._statusObserver['_owner'] = this;
+
+    this._setIOSAudioSessionOutput();
+    this._setupPlayerItem(options.audioFile, false);
+  }
+
+  async pause(): Promise<boolean> {
+    if (!this._player) {
+      throw new Error('Player not initialized.');
+    }
+
+    try {
+      if (this._player && this._player.timeControlStatus === AVPlayerTimeControlStatus.Playing) {
+        this.log.info('pause(): pausing player');
+        this._player.pause();
+        this._sendEvent(AudioPlayerEvent.PAUSED);
+
+        return true;
       }
-    });
+    } catch (e) {
+      this.log.error('pause(): error', e);
+
+      throw e;
+    }
   }
 
-  public dispose(): Promise<any> {
-    return new Promise((resolve, reject) => {
-      try {
-        TNS_Player_Log('disposing TNSPlayer...');
-        if (this._player && this.isAudioPlaying()) {
-          this._player.stop();
-        }
-        const audioSession = AVAudioSession.sharedInstance();
-        audioSession.setActiveError(false);
-        this._reset();
-        resolve();
-      } catch (ex) {
-        if (this._errorCallback) {
-          this._errorCallback({ ex });
-        }
-        TNS_Player_Log('dispose error', ex);
-        reject(ex);
+  async play(): Promise<boolean> {
+    try {
+      if (!this.isAudioPlaying()) {
+
+        this.log.info('play(): changed state from paused to playing');
+
+        this._player.play();
+
+        return true;
       }
-    });
+    } catch (e) {
+      this.log.error('play(): threw an exception', e);
+      throw e;
+    }
   }
 
-  public isAudioPlaying(): boolean {
-    return this._player ? this._player.playing : false;
+  resume(): void {
+    if (this._player && this._player.currentItem) {
+      this.log.info('resume(): called');
+      this._player.play();
+    }
   }
 
-  public getAudioTrackDuration(): Promise<string> {
-    return new Promise((resolve, reject) => {
-      try {
-        const duration = this._player ? this._player.duration : 0;
-        TNS_Player_Log('audio track duration', duration);
-        resolve(duration.toString());
-      } catch (ex) {
-        if (this._errorCallback) {
-          this._errorCallback({ ex });
+  playAtTime(time: number): void {
+    if (this._player && this._player.currentItem) {
+      this.log.info('playAtTime()', time);
+
+      this._player.seekToTime(CMTimeMakeWithSeconds(time, 1000));
+    }
+  }
+
+  async seekTo(time: number): Promise<boolean> {
+    const currentItem = this._player.currentItem;
+
+    if (!currentItem) {
+      this.log.error('seekTo(): player does not have an item', {
+        platform: 'ios',
+      });
+
+      return false;
+    }
+
+    const readyToPlay = currentItem.status === AVPlayerItemStatus.ReadyToPlay;
+    if (!readyToPlay) {
+      this.log.error('seekTo(): item was not ready to play');
+
+      return false;
+    }
+
+    try {
+      this._player.seekToTime(CMTimeMakeWithSeconds(time, 1000));
+      this._sendEvent(AudioPlayerEvent.SEEK);
+      this.log.info(`seekTo(): seeked to ${time}`);
+    } catch (e) {
+      this.log.error('seekTo(): an exception', e);
+      throw e;
+    }
+
+    return true;
+  }
+
+  async dispose(): Promise<any> {
+    try {
+      this.log.info('disposing player');
+
+      if (this._player) {
+        // remove the status observer from the AVPlayerItem
+        if (this._player.currentItem) {
+          this._removeStatusObserver(this._player.currentItem);
         }
-        TNS_Player_Log('getAudioTrackDuration error', ex);
-        reject(ex);
+
+        this._player.pause();
+        this._player.replaceCurrentItemWithPlayerItem(null); // de-allocates the AVPlayer
+        this._player = null;
       }
-    });
+
+      return true;
+    } catch (e) {
+      this.log.error('dispose(): threw an exception', e);
+      throw e;
+    }
   }
 
-  public changePlayerSpeed(speed) {
+  isAudioPlaying(): boolean {
+    return this._player &&
+      this._player.timeControlStatus === AVPlayerTimeControlStatus.Playing;
+  }
+
+  async getAudioTrackDuration(): Promise<string> {
+    try {
+      const seconds = CMTimeGetSeconds(this._player.currentItem.asset.duration);
+      const milliseconds = seconds * 1000.0;
+
+      this.log.info('audio track duration', milliseconds);
+
+      return milliseconds.toString();
+    } catch (e) {
+      this.log.error('getAudioTrackDuration error', e);
+      throw e;
+    }
+  }
+
+  changePlayerSpeed(speed) {
     if (this._player && speed) {
       // make sure speed is a number/float
       if (typeof speed === 'string') {
@@ -332,27 +261,114 @@ export class TNSPlayer extends NSObject implements TNSPlayerI {
     }
   }
 
-  public audioPlayerDidFinishPlayingSuccessfully(player?: any, flag?: boolean) {
-    if (flag && this._completeCallback) {
-      this._completeCallback({ player, flag });
-    } else if (!flag && this._errorCallback) {
-      this._errorCallback({ player, flag });
+  //  audioPlayerDidFinishPlayingSuccessfully(player?: any, flag?: boolean) {
+  //   if (flag && this._completeCallback) {
+  //     this._completeCallback({ player, flag });
+  //   } else if (!flag && this._errorCallback) {
+  //     this._errorCallback({ player, flag });
+  //   }
+  // }
+
+  //  audioPlayerDecodeErrorDidOccurError(player: any, error: NSError) {
+  //   if (this._errorCallback) {
+  //     this._errorCallback({ player, error });
+  //   }
+  // }
+
+  /**
+   * Notify events by name and optionally pass data
+   */
+  _sendEvent(eventName: string, data?: any) {
+    if (this.events) {
+      this.events.notify(<any> {
+        eventName,
+        object: this,
+        data: data,
+      });
     }
   }
 
-  public audioPlayerDecodeErrorDidOccurError(player: any, error: NSError) {
-    if (this._errorCallback) {
-      this._errorCallback({ player, error });
+  private _setupPlayerItem(audioUrl, isLocalFile: boolean) {
+    let url;
+    if (isLocalFile) {
+      url = NSURL.fileURLWithPath(audioUrl);
+    } else {
+      url = NSURL.URLWithString(audioUrl);
+    }
+
+    const avAsset = AVURLAsset.URLAssetWithURLOptions(url, null);
+    const playerItem = AVPlayerItem.playerItemWithAsset(avAsset);
+
+    // replace the current AVPlayerItem if the player already exists
+    if (this._player && this._player.currentItem) {
+      this._player.replaceCurrentItemWithPlayerItem(playerItem);
+    } else {
+      this._player = AVPlayer.playerWithPlayerItem(playerItem);
+      // @link - https://stackoverflow.com/a/42628097/1893557
+      this._player.automaticallyWaitsToMinimizeStalling = false;
+    }
+
+    // setup the status observer for the AVPlayerItem
+    this._addStatusObserver(playerItem);
+  }
+
+  private _setIOSAudioSessionOutput() {
+    const audioSession = AVAudioSession.sharedInstance();
+    const output = audioSession.currentRoute.outputs.lastObject.portType;
+    this.log.info('IOSAudioSessionOutput', output);
+
+    if (output.match(/Receiver/)) {
+      try {
+        audioSession.setCategoryError(AVAudioSessionCategoryPlayAndRecord);
+        audioSession.overrideOutputAudioPortError(
+          AVAudioSessionPortOverride.Speaker,
+        );
+        audioSession.setActiveError(true);
+        this.log.info('audioSession category set and active');
+      } catch (e) {
+        this.log.error('setting audioSession category failed', e);
+        throw e;
+      }
     }
   }
 
-  private _reset() {
-    if (this._player) {
-      this._player = undefined;
+  private _addStatusObserver(currentItem: AVPlayerItem) {
+    this._statusObserverActive = true;
+    currentItem.addObserverForKeyPathOptionsContext(
+      this._statusObserver,
+      'status',
+      0,
+      null,
+    );
+  }
+
+  private _removeStatusObserver(currentItem: AVPlayerItem) {
+    // If the observer is active, then we need to remove it...
+    if (!this._statusObserverActive) {
+      return;
     }
-    if (this._task) {
-      this._task.cancel();
-      this._task = undefined;
+
+    this._statusObserverActive = false;
+    if (currentItem) {
+      currentItem.removeObserverForKeyPath(this._statusObserver, 'status');
+    }
+  }
+}
+
+class PlayerObserverClass extends NSObject {
+  observeValueForKeyPathOfObjectChangeContext(
+    path: string,
+    obj: Object,
+    change: NSDictionary<any, any>,
+    context: any,
+  ) {
+    if (path === 'status') {
+      if (this['_owner']._player.currentItem.status === AVPlayerItemStatus.ReadyToPlay) {
+        // send the ready event
+        this['_owner']._sendEvent(AudioPlayerEvent.READY);
+        // if playing url, we need to call play here
+        this['_owner']._player.play();
+      }
     }
   }
 }

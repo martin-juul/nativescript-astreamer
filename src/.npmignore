@@ -13,12 +13,5 @@ tsconfig.json
 .vs/
 .sln
 *.sln
-demo/
-screens/
-node_modules/
-
-*.ts
 !*.d.ts
-*.map
-tsconfig.json
 references.d.ts

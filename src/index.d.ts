@@ -23,67 +23,24 @@ export interface AudioPlayerOptions {
 
   /**
    * Callback to execute when playback has completed.
-   * @returns {Object} An object containing the native values for the callback.
+   * @returns An object containing the native values for the callback.
    */
-  completeCallback?: Function;
+  completeCallback?: Function<object>;
 
   /**
    * Callback to execute when playback has an error.
-   * @returns {Object} An object containing the native values for the error callback.
+   * @returns An object containing the native values for the error callback.
    */
-  errorCallback?: Function;
+  errorCallback?: Function<object>;
 
   /**
    * Callback to execute when info is emitted from the player.
-   * @returns {Object} An object containing the native values for the info callback.
+   * @returns An object containing the native values for the info callback.
    */
-  infoCallback?: Function;
+  infoCallback?: Function<object>;
 }
 
-export interface AudioRecorderOptions {
-  /**
-   * The name of the file recorded.
-   */
-  filename: string;
-
-  /**
-   * The audio source to record *** ANDROID ONLY for now ***
-   * https://developer.android.com/reference/android/media/MediaRecorder.AudioSource.html
-   */
-  source?: any;
-
-  /**
-   * The max duration of the audio recording.
-   */
-  maxDuration?: number;
-
-  /**
-   * Set true to enable audio metering.
-   */
-  metering?: boolean;
-
-  /**
-   * The format of the audio recording.
-   */
-  format?: any;
-  channels?: any;
-  sampleRate?: any;
-  bitRate?: any;
-  encoder?: any;
-
-  /**
-   * Callback to execute when playback has an error.
-   * @returns {Object} An object containing the native values for the error callback.
-   */
-  errorCallback?: Function;
-
-  /**
-   * Callback to execute when info is emitted from the player.
-   * @returns {Object} An object containing the native values for the info callback.
-   */
-  infoCallback?: Function;
-}
-export interface TNSPlayerI {
+export interface NSAudioPlayerI {
   readonly ios?: any;
   readonly android?: any;
 
@@ -103,6 +60,7 @@ export interface TNSPlayerI {
   duration: number;
 
   initFromFile(options: AudioPlayerOptions): Promise<any>;
+
   /**
    * Starts playing audio file from local app files.
    */
@@ -162,14 +120,9 @@ export interface TNSPlayerI {
    */
   playAtTime(time: number);
 }
-export interface TNSRecordI {
-  start(options: AudioRecorderOptions): Promise<any>;
-  pause(): Promise<any>;
-  resume(): Promise<any>;
-  stop(): Promise<any>;
-  dispose(): Promise<any>;
-}
-export declare class TNSPlayer {
+
+export declare class NSAudioPlayer {
+  // tslint:disable-next-line:variable-name
   static ObjCProtocols: any[];
   readonly ios: any;
   readonly android: any;
@@ -201,6 +154,7 @@ export declare class TNSPlayer {
    * Starts playing audio file from local app files.
    */
   playFromFile(options: AudioPlayerOptions): Promise<any>;
+
   initFromUrl(options: AudioPlayerOptions): Promise<any>;
 
   /**
@@ -254,78 +208,9 @@ export declare class TNSPlayer {
   audioPlayerDidFinishPlayingSuccessfully(player?: any, flag?: boolean): void;
 }
 
-export declare class TNSRecorder {
-  static ObjCProtocols: any[];
-  private _recorder;
-  private _recordingSession;
-  readonly ios: any;
-  readonly android: any;
-
-  /**
-   * Set to true to enable console log output for debugging.
-   */
-  debug: boolean;
-
-  /**
-   * Returns true if the device is capable of recording, false otherwise.
-   */
-  static CAN_RECORD(): boolean;
-
-  /**
-   * Android Only
-   * Returns true if the RECORD_AUDIO permission has been granted.
-   */
-  hasRecordPermission(): boolean;
-
-  /**
-   * Android Only
-   * Promise will resolve if the user grants the permission or if the permission has already been granted.
-   */
-  requestRecordPermission(): Promise<any>;
-
-  /**
-   * Starts a recording session with the provided options.
-   * @param options [AudioRecorderOptions]
-   */
-  start(options: AudioRecorderOptions): Promise<any>;
-
-  /**
-   * Pauses the recorder.
-   */
-  pause(): Promise<any>;
-
-  /**
-   * Resumes the recorder.
-   */
-  resume(): Promise<any>;
-
-  /**
-   * Stops the recording.
-   */
-  stop(): Promise<any>;
-
-  /**
-   * Disposes of the recorder session.
-   */
-  dispose(): Promise<any>;
-
-  /**
-   * Returns the maximum absolute amplitude that was sampled since the last call to this method.
-   * @param channel [number]
-   */
-  getMeters(channel?: number): any;
-
-  /**
-   * iOS Only
-   * Returns value indicating the recorder is currently recording.
-   */
-  isRecording(): any;
-  audioRecorderDidFinishRecording(recorder: any, success: boolean): void;
+export enum AudioPlayerEvent {
+  SEEK = 'seek',
+  PAUSED = 'paused',
+  STARTED = 'started',
+  READY = 'ready'
 }
-
-export interface IAudioPlayerEvents {
-  seek: 'seek';
-  paused: 'paused';
-  started: 'started';
-}
-export const AudioPlayerEvents: IAudioPlayerEvents;
