@@ -5,7 +5,7 @@ tsconfig.json
 *.png
 *.log
 *.ts
-!index.d.ts
+!astreamer.d.ts
 !async-await.js
 
 # generated files

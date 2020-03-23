@@ -22,6 +22,7 @@ demo/platforms/*
 demo/lib/*
 
 src/*.js
+src/dist
 /*.js
 demo/app/*.js
 demo/node_modules/
@@ -37,7 +38,7 @@ demo/app/.DS_Store
 *.js.map
 *.log
 src/*.d.ts
-!src/index.d.ts
+!src/astreamer.d.ts
 !src/references.d.ts
 !src/scripts/*.js
 !seed-tests/*.js
