@@ -1,5 +1,5 @@
 {
-  "name": "nativescript-audio-player",
+  "name": "nativescript-astreamer",
   "version": "1.0.0",
   "description": "NativeScript plugin to play audio from filesystem and network.",
   "author": {
@@ -8,10 +8,10 @@
   },
   "main": "audio",
   "license": "MIT",
-  "homepage": "https://github.com/martin-juul/nativescript-audio-player",
+  "homepage": "https://github.com/martin-juul/nativescript-astreamer",
   "readmeFilename": "README.md",
   "bugs": {
-    "url": "https://github.com/martin-juul/nativescript-audio-player/issues"
+    "url": "https://github.com/martin-juul/nativescript-astreamer/issues"
   },
   "nativescript": {
     "platforms": {
@@ -50,7 +50,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/martin-juul/nativescript-audio-player"
+    "url": "https://github.com/martin-juul/nativescript-astreamer"
   },
   "dependencies": {
     "nativescript-permissions": "~1.3.8"

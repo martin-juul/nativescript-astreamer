@@ -1,4 +1,4 @@
-# nativescript-audio-player
+# nativescript-astreamer
 ---
 
 Forked from [https://github.com/nstudio/nativescript-audio](https://github.com/nstudio/nativescript-audio)
@@ -10,7 +10,7 @@ Forked from [https://github.com/nstudio/nativescript-audio](https://github.com/n
 
 ## Installation
 
-`tns plugin add nativescript-audio-player`
+`tns plugin add nativescript-astreamer`
 
 ---
 
@@ -27,7 +27,7 @@ Forked from [https://github.com/nstudio/nativescript-audio](https://github.com/n
 ### TypeScript Example
 
 ```typescript
-import { NSAudioPlayer } from 'nativescript-audio-player';
+import { NSAudioPlayer } from 'nativescript-astreamer';
 
 export class YourClass {
   private player: NSAudioPlayer;
