@@ -1,5 +1,5 @@
 {
-  "name": "nativescript-astreamer",
+  "name": "@martin-juul/nativescript-astreamer",
   "version": "1.0.0",
   "description": "NativeScript plugin to play audio from filesystem and network.",
   "author": {
@@ -20,8 +20,11 @@
     }
   },
   "scripts": {
-    "tsc": "tsc -skipLibCheck",
-    "build": "yarn install --frozen-lockfile && yarn run tsc",
+    "tsc": "tsc -skipLibCheck --outDir dist",
+    "tsc.dist": "yarn run dist.clean && tsc -skipLibCheck --outDir dist && yarn run dist.copy",
+    "dist.copy": "cp -R platforms dist && cp ../README.md dist && cp astreamer.d.ts dist && cp package.json dist && cp ../NOTICE dist",
+    "dist.clean": "rimraf dist",
+    "build": "yarn install --frozen-lockfile && yarn run tsc.dist",
     "demo.reset": "cd ../demo && rimraf platforms",
     "demo.ios": "yarn run preparedemo && cd ../demo && tns run ios",
     "demo.ios.device": "yarn run preparedemo && cd ../demo && tns platform remove ios && tns run ios",
