@@ -1,4 +1,9 @@
 # nativescript-astreamer
+
+<a href="https://www.npmjs.com/package/@martin-juul/nativescript-astreamer">
+  <img src="https://flat.badgen.net/npm/v/@martin-juul/nativescript-astreamer" />
+</a>
+
 ---
 
 Forked from [https://github.com/nstudio/nativescript-audio](https://github.com/nstudio/nativescript-audio)
