@@ -15,7 +15,7 @@ Forked from [https://github.com/nstudio/nativescript-audio](https://github.com/n
 
 ## Installation
 
-`tns plugin add nativescript-astreamer`
+`tns plugin add @martin-juul/nativescript-astreamer`
 
 ---
 
